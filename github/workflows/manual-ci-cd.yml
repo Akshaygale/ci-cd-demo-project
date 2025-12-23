@@ -1,0 +1,40 @@
+name: CI/CD Manual Pipeline
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-south-1
+
+    - name: Login to ECR
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build Docker image
+      run: |
+        docker build -t ci-cd-demo:manual .
+        docker tag ci-cd-demo:manual ${{ secrets.ECR_REPO_URI }}:manual
+
+    - name: Push to ECR
+      run: |
+        docker push ${{ secrets.ECR_REPO_URI }}:manual
+
+    - name: Deploy to EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/your_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} "
+        docker pull ${{ secrets.ECR_REPO_URI }}:manual
+        docker stop demo || true
+        docker rm demo || true
+        docker run -d -p 80:80 --name demo ${{ secrets.ECR_REPO_URI }}:manual
+        "
